@@ -72,6 +72,8 @@ Each tool calls the real integration when it's configured, and otherwise falls b
 npm install
 cp .env.example .env.local   # add your keys
 npm run dev                  # http://localhost:3100
+npm run demo                 # or: CampusOS + InternPrep API + InternPrep web together
+npm run preflight            # check every integration before a demo
 ```
 
 Only `ANTHROPIC_API_KEY` is required. Every other integration is optional. Set `DEMO_MODE=true` to force the fixtures offline.

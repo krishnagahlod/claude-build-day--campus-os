@@ -59,6 +59,8 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const recRef = useRef<any>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const runIdRef = useRef<string | null>(null);
+  const autoApproveRef = useRef(false);
   const running = activeGoal !== null && !final && !error && !viewing;
 
   useEffect(() => {
@@ -84,6 +86,14 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [final]);
 
+  useEffect(() => {
+    document.title = viewing || activeGoal === null ? "CampusOS · Get it done"
+      : error ? "Stopped · CampusOS"
+      : final ? "✓ Done · CampusOS"
+      : steps.some((s) => s.status === "awaiting") ? "● Needs your approval · CampusOS"
+      : "Working… · CampusOS";
+  }, [activeGoal, final, error, steps, viewing]);
+
   function speak(text: string) {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
@@ -98,6 +108,7 @@ export default function Home() {
     const g = text.trim();
     if (!g || running) return;
     window.speechSynthesis?.cancel();
+    autoApproveRef.current = false; runIdRef.current = null;
     setViewing(null); setActiveGoal(g); setPlan(null); setSteps([]); setArtifacts([]); setFinal(null); setError(null); setRunId(null);
     setStartedAt(Date.now()); setEndedAt(null); setNow(Date.now());
     setStatus("Understanding your goal");
@@ -130,10 +141,11 @@ export default function Home() {
 
   function handle(e: any) {
     switch (e.type) {
-      case "run": setRunId(e.runId); break;
+      case "run": setRunId(e.runId); runIdRef.current = e.runId; break;
       case "status": setStatus(e.text); break;
       case "plan": setPlan({ goal: e.goal, steps: e.steps }); break;
       case "step":
+        if (e.status === "awaiting" && autoApproveRef.current) { decide(e.id, true); break; }
         setSteps((prev) => {
           const i = prev.findIndex((s) => s.id === e.id);
           if (i === -1) return [...prev, e];
@@ -152,7 +164,12 @@ export default function Home() {
 
   async function decide(stepId: string, approved: boolean) {
     setSteps((prev) => prev.map((s) => (s.id === stepId ? { ...s, status: approved ? "running" : "skipped" } : s)));
-    await fetch("/api/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ runId, stepId, approved }) });
+    await fetch("/api/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ runId: runIdRef.current, stepId, approved }) });
+  }
+
+  function approveAll(stepId: string) {
+    autoApproveRef.current = true; // every later action in this run is approved automatically
+    decide(stepId, true);
   }
 
   function toggleMic() {
@@ -214,7 +231,8 @@ export default function Home() {
     seen[p.tool] = (seen[p.tool] ?? 0) + 1;
     return !!final || (doneByTool[p.tool] ?? 0) >= seen[p.tool];
   });
-  const awaiting = steps.some((s) => s.status === "awaiting");
+  const awaitingStep = steps.find((s) => s.status === "awaiting") ?? null;
+  const awaiting = !!awaitingStep;
   const elapsed = startedAt ? (endedAt ?? now) - startedAt : 0;
   const liveCount = systems?.systems.filter((s) => s.live).length ?? 0;
   const usedApps = Array.from(new Map(steps.filter((s) => s.status === "done").map((s) => [appMeta(s.app).short, appMeta(s.app).color])));
@@ -335,29 +353,15 @@ export default function Home() {
               </div>
             </div>
 
+            <PlanBar plan={plan} planDone={planDone} final={!!final} />
+
             <div className="grid">
               <div>
                 <div className="card">
-                  <div className="card-h"><span>Plan</span>{plan && <span>{planDone?.filter(Boolean).length}/{plan.steps.length}</span>}</div>
-                  {plan ? (
-                    <>
-                      <div className="plan-goal">{plan.goal}</div>
-                      <ul className="plan-list">
-                        {plan.steps.map((p, i) => (
-                          <li key={i} className={planDone?.[i] ? "done" : ""}><span className="pc">{planDone?.[i] ? <Icon name="check" size={11} /> : i + 1}</span>{p.title}</li>
-                        ))}
-                      </ul>
-                    </>
-                  ) : (
-                    <div className="placeholder"><div className="skel" style={{ width: "70%" }} /><div className="skel" style={{ width: "90%" }} /><div className="skel" style={{ width: "60%" }} /></div>
-                  )}
-                </div>
-
-                <div className="card">
                   <div className="card-h"><span>Live execution</span><span>{steps.filter((s) => s.status === "done").length} actions</span></div>
                   <div className="timeline">
-                    {steps.map((s) => <StepRow key={s.id} s={s} onDecide={decide} />)}
-                    {running && status && <div className="thinking"><span className="spinner" /><span className="shimmer">{status}…</span></div>}
+                    {steps.map((s) => <StepRow key={s.id} s={s} />)}
+                    {running && status && !awaitingStep && <div className="thinking"><span className="spinner" /><span className="shimmer">{status}…</span></div>}
                     {!running && steps.length === 0 && !error && <div className="placeholder">No actions recorded.</div>}
                   </div>
                   {error && !error.startsWith("Stopped") && <div className="error-banner"><Icon name="x" size={14} /> {error}</div>}
@@ -365,9 +369,19 @@ export default function Home() {
               </div>
 
               <div>
+                {artifacts.length > 0 && (
+                  <div className="card outcomes">
+                    <div className="card-h"><span>What got done</span>
+                      {artifacts.some((x) => x.kind === "event") && <button className="chip-btn small" onClick={() => downloadIcs(artifacts)}><Icon name="download" size={12} /> .ics</button>}
+                    </div>
+                    <OutcomeSummary artifacts={artifacts} />
+                    <div className="artifacts">{artifacts.map((a, i) => <ArtifactRow key={i} a={a} />)}</div>
+                  </div>
+                )}
+
                 <div className="card">
                   <div className="card-h">
-                    <span>Result</span>
+                    <span>Brief</span>
                     {final && (
                       <div className="card-actions">
                         <button className="chip-btn small" onClick={() => speak(final.spoken)}><Icon name="play" size={12} /> Listen</button>
@@ -385,24 +399,25 @@ export default function Home() {
                         </div>
                       )}
                     </>
-                  ) : (
-                    <div className="placeholder">
-                      <span>{running ? "Working on it. Your brief lands here." : "No result."}</span>
-                      <div className="skel" style={{ width: "85%" }} /><div className="skel" style={{ width: "95%" }} /><div className="skel" style={{ width: "70%" }} /><div className="skel" style={{ width: "80%" }} />
+                  ) : running ? (
+                    <div className="working">
+                      <div className="working-orb"><span /></div>
+                      <div>
+                        <div className="working-t">{awaitingStep ? "Waiting for your approval" : status ?? "Working"}</div>
+                        <div className="working-s">
+                          {usedApps.length > 0 ? <>So far: {usedApps.map(([n]) => n).join(", ")}. </> : null}
+                          Your brief lands here when every step is done.
+                        </div>
+                      </div>
                     </div>
+                  ) : (
+                    <div className="placeholder">No brief for this run.</div>
                   )}
                 </div>
-
-                {artifacts.length > 0 && (
-                  <div className="card">
-                    <div className="card-h"><span>Actions taken</span>
-                      {artifacts.some((x) => x.kind === "event") && <button className="chip-btn small" onClick={() => downloadIcs(artifacts)}><Icon name="download" size={12} /> .ics</button>}
-                    </div>
-                    <div className="artifacts">{artifacts.map((a, i) => <ArtifactRow key={i} a={a} />)}</div>
-                  </div>
-                )}
               </div>
             </div>
+
+            {awaitingStep && !viewing && <ApprovalDock step={awaitingStep} onDecide={decide} onApproveAll={approveAll} />}
           </>
         )}
       </main>
@@ -445,7 +460,7 @@ function Composer({ goal, setGoal, onRun, onMic, listening, disabled }: { goal: 
   );
 }
 
-function StepRow({ s, onDecide }: { s: Step; onDecide: (id: string, ok: boolean) => void }) {
+function StepRow({ s }: { s: Step }) {
   const meta = appMeta(s.app);
   const status = s.status === "running" ? <span className="spinner" />
     : s.status === "done" ? <Icon name="check" size={14} />
@@ -461,21 +476,104 @@ function StepRow({ s, onDecide }: { s: Step; onDecide: (id: string, ok: boolean)
           <span className="app-badge" style={{ color: meta.color, borderColor: `${meta.color}55`, background: `${meta.color}14` }}>
             <Icon name={meta.icon} size={11} /> {meta.short}
           </span>
-          {s.risk === "execute" && s.status === "awaiting" && <span className="tag execute">needs approval</span>}
+          {s.status === "awaiting" && <span className="tag execute">waiting for your approval</span>}
           {s.source && <span className={`tag ${s.source}`}>{s.source === "live" ? "live" : "demo data"}</span>}
           {s.summary && <span className="step-summary">{s.summary}</span>}
         </div>
-        {s.status === "awaiting" && (
-          <div className="approval">
-            <pre>{formatInput(s)}</pre>
-            <div className="approval-btns">
-              <button className="approve" onClick={() => onDecide(s.id, true)}><Icon name="check" size={14} /> Approve</button>
-              <button className="skip" onClick={() => onDecide(s.id, false)}>Skip</button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
+  );
+}
+
+function PlanBar({ plan, planDone, final }: { plan: Plan | null; planDone?: boolean[]; final: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (!plan) return <div className="planbar"><div className="planbar-row"><span className="planbar-label">Plan</span><span className="shimmer">Building your plan…</span></div><div className="progress"><span style={{ width: "4%" }} /></div></div>;
+  const done = planDone?.filter(Boolean).length ?? 0;
+  const current = plan.steps.findIndex((_, i) => !planDone?.[i]);
+  return (
+    <div className="planbar">
+      <button className="planbar-row" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span className="planbar-label">Plan</span>
+        <span className="planbar-goal">{plan.goal}</span>
+        <span className="planbar-now">{final || current === -1 ? "All steps complete" : <>Step {current + 1} of {plan.steps.length} · {plan.steps[current].title}</>}</span>
+        <span className="planbar-toggle">{open ? "Hide steps" : "All steps"}</span>
+      </button>
+      <div className="progress"><span style={{ width: `${Math.max(4, (done / plan.steps.length) * 100)}%` }} /></div>
+      {open && (
+        <ol className="planbar-list">
+          {plan.steps.map((p, i) => (
+            <li key={i} className={planDone?.[i] ? "done" : i === current ? "now" : ""}>
+              <span className="pc">{planDone?.[i] ? <Icon name="check" size={11} /> : i + 1}</span>{p.title}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+function OutcomeSummary({ artifacts }: { artifacts: Artifact[] }) {
+  const events = artifacts.filter((a) => a.kind === "event").length;
+  const fits = artifacts.filter((a): a is Extract<Artifact, { kind: "fit" }> => a.kind === "fit");
+  const mocks = artifacts.filter((a) => a.kind === "practice").length;
+  const msgs = artifacts.filter((a) => a.kind === "message").length;
+  const chips = [
+    events ? { icon: "calendar", color: appMeta("Calendar").color, text: `${events} session${events > 1 ? "s" : ""} booked` } : null,
+    fits.length ? { icon: "file", color: appMeta("InternPrep AI").color, text: `Resume fit ${fits.map((f) => f.score).join(" / ")}` } : null,
+    mocks ? { icon: "mic", color: appMeta("InternPrep AI").color, text: `${mocks} mock interview${mocks > 1 ? "s" : ""} ready` } : null,
+    msgs ? { icon: "send", color: appMeta("Telegram").color, text: "Recap sent" } : null,
+  ].filter((c): c is { icon: string; color: string; text: string } => !!c);
+  if (!chips.length) return null;
+  return (
+    <div className="outcome-chips">
+      {chips.map((c) => <span key={c.text} className="outcome-chip" style={{ color: c.color, borderColor: `${c.color}44`, background: `${c.color}12` }}><Icon name={c.icon} size={13} />{c.text}</span>)}
+    </div>
+  );
+}
+
+function ApprovalDock({ step, onDecide, onApproveAll }: { step: Step; onDecide: (id: string, ok: boolean) => void; onApproveAll: (id: string) => void }) {
+  const i = step.input ?? {};
+  const meta = appMeta(step.app);
+  const fmt = (x: unknown, o: Intl.DateTimeFormatOptions) => { const d = new Date(String(x)); return isNaN(+d) ? String(x ?? "") : d.toLocaleString("en-US", o); };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.tagName === "TEXTAREA") return;
+      if (e.key === "Enter") { e.preventDefault(); onDecide(step.id, true); }
+      if (e.key === "Escape") onDecide(step.id, false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [step.id, onDecide]);
+  return (
+    <>
+    <div className="dock-spacer" />
+    <div className="dock-wrap" role="dialog" aria-label="Approval needed">
+      <div className="dock" key={step.id}>
+        <div className="dock-head">
+          <span className="dock-icon" style={{ color: meta.color, background: `${meta.color}18`, borderColor: `${meta.color}44` }}><Icon name={meta.icon} size={16} /></span>
+          <div className="dock-titles">
+            <div className="dock-kicker"><Icon name="shield" size={12} /> {step.tool === "send_telegram" ? "CampusOS wants to message you on Telegram" : `CampusOS wants to add this to your ${meta.short}`}</div>
+            {step.tool === "create_calendar_event" && <div className="dock-title">{String(i.title ?? "")}</div>}
+          </div>
+        </div>
+        {step.tool === "create_calendar_event" ? (
+          <div className="dock-body">
+            <div className="dock-when"><Icon name="clock" size={13} /> {fmt(i.start, { weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} – {fmt(i.end, { hour: "numeric", minute: "2-digit" })}</div>
+            {i.notes ? <p className="dock-notes">{String(i.notes)}</p> : null}
+          </div>
+        ) : step.tool === "send_telegram" ? (
+          <div className="dock-body"><div className="bubble">{String(i.message ?? "")}</div></div>
+        ) : (
+          <div className="dock-body"><pre className="dock-notes">{JSON.stringify(i, null, 2)}</pre></div>
+        )}
+        <div className="dock-actions">
+          <button className="approve" onClick={() => onDecide(step.id, true)}><Icon name="check" size={14} /> Approve <kbd className="kbd-dark">↵</kbd></button>
+          <button className="skip" onClick={() => onDecide(step.id, false)}>Skip <kbd>Esc</kbd></button>
+          <button className="linkish" onClick={() => onApproveAll(step.id)}>Approve all for this run</button>
+        </div>
+      </div>
+    </div>
+    </>
   );
 }
 
@@ -494,15 +592,6 @@ function downloadIcs(artifacts: Artifact[]) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function formatInput(s: Step) {
-  const i = s.input ?? {};
-  if (s.tool === "send_telegram") return String(i.message ?? "");
-  if (s.tool === "create_calendar_event") {
-    const when = (x: unknown) => new Date(String(x)).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-    return `${i.title}\n${when(i.start)} → ${new Date(String(i.end)).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}${i.notes ? `\n\n${i.notes}` : ""}`;
-  }
-  return JSON.stringify(i, null, 2);
-}
 
 function ArtifactRow({ a }: { a: Artifact }) {
   if (a.kind === "event") {
@@ -554,7 +643,7 @@ function ArtifactRow({ a }: { a: Artifact }) {
         <div className="a-ic" style={{ color: appMeta("InternPrep AI").color }}><Icon name="mic" size={18} /></div>
         <div>
           <div className="a-t">{a.title}</div>
-          <div className="a-s">“{a.question}{a.question.length >= 400 ? "…" : ""}”</div>
+          <div className="a-s clamp">“{a.question}{a.question.length >= 400 ? "…" : ""}”</div>
           <a href={a.link} target="_blank" rel="noreferrer" className="a-link">Start practising in InternPrep AI <Icon name="external" size={11} /></a>
         </div>
       </div>

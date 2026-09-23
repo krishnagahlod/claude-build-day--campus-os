@@ -42,8 +42,14 @@ One loop across the student's three products: FIND (Opportunity OS) → PREPARE 
 - Run status pill with timer, real Stop (aborts the server loop), recent runs, copy/listen, `.ics` export
 - Production build passes; desktop + mobile verified with headless Edge screenshots
 
+## PM pass (done)
+- Approval dock pinned to the bottom of the viewport (Enter/Esc, Approve all), so approvals never sit below the fold
+- "What got done" (outcome chips + artifacts) above the brief; plan collapsed into a progress bar
+- Live working state instead of skeletons; tab title shows approval-needed
+- `npm run demo` (all 3 servers) and `npm run preflight` (9 checks)
+
 ## Demo gotchas
-- Three servers must be running: CampusOS (3100), InternPrep API (8000, `apps/api/.venv`), InternPrep web (3200, since 3000 is used by Tarashio).
+- `npm run demo` starts CampusOS (3100), InternPrep API (8000) and InternPrep web (3200; 3000 is Tarashio). Then `npm run preflight`.
 - Log into local InternPrep web once before the demo so practice links open straight into the session.
 - Interview-prep run takes ~80s (mock-interview creation is the slow step). Narrate over it.
 - Restart the dev server before the demo: created events persist in memory across runs.
