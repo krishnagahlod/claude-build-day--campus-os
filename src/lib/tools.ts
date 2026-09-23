@@ -118,8 +118,8 @@ export const TOOLS: ToolDef[] = [
     app: "GitHub",
     risk: "observe",
     requiresApproval: false,
-    description: "Search GitHub for reusable open-source repositories. Returns stars, license and last update so you can judge maturity.",
-    input_schema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+    description: "Search GitHub for reusable open-source repositories. Returns stars, license and last update so you can judge maturity. GitHub search is keyword-based: use 2-3 broad keywords (e.g. 'browser agent', 'mcp server'), never long sentences.",
+    input_schema: { type: "object", properties: { query: { type: "string", description: "2-3 broad keywords" } }, required: ["query"] },
     label: (i) => `Scanning GitHub for “${i.query}”`,
     run: async ({ query }) => {
       if (!DEMO) {
