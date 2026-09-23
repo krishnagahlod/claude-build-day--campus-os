@@ -7,6 +7,7 @@ import {
   searchFixture,
   studentProfile,
 } from "./fixtures";
+import { insertEvent, listEvents } from "./google";
 import { atsCheck, fetchCase, fetchOpportunities, fetchProfile, fetchResume, startInterview } from "./sources";
 
 // Autonomy levels from the product spec: observe → prepare → execute (gated).
@@ -283,6 +284,8 @@ export const TOOLS: ToolDef[] = [
     input_schema: { type: "object", properties: { days: { type: "number" } }, required: ["days"] },
     label: (i) => `Checking your calendar (next ${i.days ?? 7} days)`,
     run: async ({ days = 7 }) => {
+      const google = await listEvents(days).catch(() => null);
+      if (google) return { data: { now: new Date().toISOString(), events: google }, summary: `${google.length} events in Google Calendar · free slots identified`, source: "live" };
       const cutoff = Date.now() + days * 864e5;
       const events = [...calendarEvents(), ...g.__createdEvents!]
         .filter((e) => new Date(e.start).getTime() <= cutoff)
@@ -308,6 +311,15 @@ export const TOOLS: ToolDef[] = [
     },
     label: (i) => `Scheduling “${i.title}” · ${fmtWhen(i.start)}`,
     run: async ({ title, start, end, notes = "" }) => {
+      const created = await insertEvent(title, start, end, notes);
+      if (created) {
+        return {
+          data: { status: "created in Google Calendar", title, start, end },
+          summary: `Added to Google Calendar · ${fmtWhen(start)} → ${fmtTime(end)}`,
+          source: "live",
+          artifact: { kind: "event", title, start, end, link: created.link },
+        };
+      }
       g.__createdEvents!.push({ title, start, end });
       const link = gcalLink(title, start, end, notes);
       return {

@@ -39,6 +39,8 @@ export default function Home() {
   const [voiceOn, setVoiceOn] = useState(true);
   const recRef = useRef<any>(null);
   const [me, setMe] = useState<{ name: string; college: string }>({ name: "Krishna Gahlod", college: "IIT Bombay" });
+  const [gcal, setGcal] = useState<{ connected: boolean; email?: string } | null>(null);
+  useEffect(() => { fetch("/api/google-status").then((r) => r.json()).then(setGcal).catch(() => {}); }, []);
   useEffect(() => { fetch("/api/profile").then((r) => r.json()).then((p) => p?.name && setMe(p)).catch(() => {}); }, []);
   const running = activeGoal !== null && !final && !error;
 
@@ -157,6 +159,9 @@ export default function Home() {
       <header className="topbar">
         <button className="brand" onClick={reset} aria-label="CampusOS home"><span className="logo" /> CampusOS</button>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          {gcal && (gcal.connected
+            ? <span className="speak-btn" title={gcal.email}>📅 Google Calendar connected</span>
+            : <a className="speak-btn" href="/api/auth/google-calendar/connect" style={{ textDecoration: "none" }}>📅 Connect Google Calendar</a>)}
           <button className="speak-btn" onClick={toggleVoice} title="Spoken summary">{voiceOn ? "🔊 Voice on" : "🔇 Voice off"}</button>
           <div className="profile-pill"><span className="avatar">{me.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}</span>{me.name.split(" ")[0]} · {me.college}</div>
         </div>
@@ -336,7 +341,7 @@ function ArtifactRow({ a }: { a: Artifact }) {
         <div>
           <div className="a-t">{a.title}</div>
           <div className="a-s">{d.toLocaleString("en-US", { weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} → {new Date(a.end).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</div>
-          <a href={a.link} target="_blank" rel="noreferrer">Add to Google Calendar →</a>
+          <a href={a.link} target="_blank" rel="noreferrer">{a.link.includes("/render?") ? "Add to Google Calendar →" : "Open in Google Calendar →"}</a>
         </div>
       </div>
     );
