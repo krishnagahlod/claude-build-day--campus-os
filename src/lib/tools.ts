@@ -183,7 +183,7 @@ export const TOOLS: ToolDef[] = [
     app: "CaseForge",
     risk: "observe",
     requiresApproval: false,
-    description: "Load the student's active case competition from CaseForge: competition rules, rounds (deliverable format, slide/time limits, deadlines), the case problem statement, objectives and constraints. Pass a hint (competition or company name) if the student named one.",
+    description: "Load the student's active case competition from CaseForge: competition rules, rounds (deliverable format, slide/time limits, deadlines), the case problem statement, objectives and constraints, plus the team's existing CaseForge work (playbook with milestone progress and strategy pillars, reasoning nodes, sources). Build on that work rather than starting over. Pass a hint (competition or company name) if the student named one.",
     input_schema: { type: "object", properties: { hint: { type: "string", description: "Competition or company name, if known" } }, required: [] },
     label: () => "Pulling your case brief from CaseForge",
     run: async ({ hint }) => {
@@ -191,7 +191,8 @@ export const TOOLS: ToolDef[] = [
       if (live) {
         const r = (live.rounds as any[])[0];
         const fmt = r ? ` · ${r.name}: ${r.deliverableFormat}${r.slideLimit ? ` (${r.slideLimit} slides)` : ""}${r.timeLimitMinutes ? ` (${r.timeLimitMinutes} min)` : ""}` : "";
-        return { data: live, summary: `${live.competition.name}${fmt}`, source: "live" };
+        const work = (live.teamWork.reasoningNodes as unknown[]).length + (live.teamWork.sources as unknown[]).length;
+        return { data: live, summary: `${live.competition.name}${fmt}${work ? ` · ${work} items of your team's work` : ""}`, source: "live" };
       }
       const c = caseLibrary()[0];
       return { data: c, summary: `${c.company} · ${c.industry} · ${c.competition}`, source: "demo" };

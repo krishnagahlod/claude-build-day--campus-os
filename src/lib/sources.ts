@@ -70,14 +70,23 @@ export async function fetchCase(hint?: string) {
       `select name, sequence, deadline, "deliverableFormat", "slideLimit", "timeLimitMinutes", "specificGuidelines", status
          from "CompetitionRound" where "competitionId" = $1 order by sequence`, [comp.id]),
     sql.query(
-      `select title, "companyName", industry, "coreProblemStatement", objectives, constraints, "caseArchetypes", "coreMemory"
+      `select id, title, "companyName", industry, "coreProblemStatement", objectives, constraints, "caseArchetypes", "coreMemory", playbook
          from "Case" where "competitionId" = $1 order by "updatedAt" desc limit 2`, [comp.id]),
   ]);
   const clip = (s: unknown, n: number) => (typeof s === "string" ? s.slice(0, n) : s);
+  // The team's existing work in CaseForge, so Claude builds on it instead of starting over.
+  const caseIds = (cases as Record<string, any>[]).map((c) => c.id);
+  const [nodes, sources] = caseIds.length
+    ? await Promise.all([
+        sql.query(`select type, status, confidence, left(content, 240) as content from "ReasoningNode" where "caseId" = any($1) order by confidence desc limit 12`, [caseIds]),
+        sql.query(`select title, url, publisher, "sourceTier" from "Source" where "caseId" = any($1) limit 8`, [caseIds]),
+      ])
+    : [[], []];
   return {
     competition: { name: comp.name, organizer: comp.organizer, mode: comp.mode, rules: clip(comp.rulesSummary, 1500), judgingCriteria: clip(comp.judgingCriteria, 800), coreMemory: clip(comp.coreMemory, 1500) },
     rounds,
-    cases: (cases as Record<string, any>[]).map((c) => ({ ...c, coreProblemStatement: clip(c.coreProblemStatement, 3500), coreMemory: clip(c.coreMemory, 1500) })),
+    cases: (cases as Record<string, any>[]).map(({ id, playbook, ...c }) => ({ ...c, coreProblemStatement: clip(c.coreProblemStatement, 3500), coreMemory: clip(c.coreMemory, 1500), playbook: clip(playbook, 2500) })),
+    teamWork: { reasoningNodes: nodes, sources },
     otherActiveCompetitions: comps.filter((c) => c.id !== comp.id).map((c) => c.name),
   };
 }

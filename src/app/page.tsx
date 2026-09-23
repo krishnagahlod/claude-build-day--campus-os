@@ -232,7 +232,9 @@ export default function Home() {
 
               {artifacts.length > 0 && (
                 <div className="card">
-                  <div className="card-h"><span>Actions taken</span><span>{artifacts.length}</span></div>
+                  <div className="card-h"><span>Actions taken</span>
+                    {artifacts.some((x) => x.kind === "event") && <button className="speak-btn" onClick={() => downloadIcs(artifacts)}>📅 Add all to calendar</button>}
+                  </div>
                   <div className="artifacts">{artifacts.map((a, i) => <ArtifactRow key={i} a={a} />)}</div>
                 </div>
               )}
@@ -296,6 +298,21 @@ function StepRow({ s, onDecide }: { s: Step; onDecide: (id: string, ok: boolean)
       </div>
     </div>
   );
+}
+
+// One .ics with every event from this run: works with Google, Apple and Outlook calendars.
+function downloadIcs(artifacts: Artifact[]) {
+  const stamp = (s: string) => new Date(s).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const esc = (s: string) => s.replace(/[\\;,]/g, (c) => "\\" + c).replace(/\n/g, "\\n");
+  const events = artifacts.filter((a): a is Extract<Artifact, { kind: "event" }> => a.kind === "event");
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//CampusOS//EN", "CALSCALE:GREGORIAN"];
+  events.forEach((e, i) => lines.push("BEGIN:VEVENT", `UID:campusos-${Date.now()}-${i}@campusos`, `DTSTAMP:${stamp(new Date().toISOString())}`,
+    `DTSTART:${stamp(e.start)}`, `DTEND:${stamp(e.end)}`, `SUMMARY:${esc(e.title)}`, "DESCRIPTION:Scheduled by CampusOS", "END:VEVENT"));
+  lines.push("END:VCALENDAR");
+  const url = URL.createObjectURL(new Blob([lines.join("\r\n")], { type: "text/calendar" }));
+  const link = Object.assign(document.createElement("a"), { href: url, download: "campusos-plan.ics" });
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function formatInput(s: Step) {
