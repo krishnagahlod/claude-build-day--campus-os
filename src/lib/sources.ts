@@ -90,3 +90,60 @@ export async function fetchCase(hint?: string) {
     otherActiveCompetitions: comps.filter((c) => c.id !== comp.id).map((c) => c.name),
   };
 }
+
+// InternPrep AI: resume from its Supabase project, ATS + mock interviews from its FastAPI.
+export async function fetchResume() {
+  const url = env("INTERNPREP_SUPABASE_URL");
+  const key = env("INTERNPREP_SUPABASE_KEY");
+  const user = env("INTERNPREP_USER_ID");
+  if (!url || !key || !user || DEMO()) return null;
+  const res = await fetch(`${url}/rest/v1/resumes?user_id=eq.${user}&select=id,raw_text,created_at&order=created_at.desc&limit=1`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+    signal: AbortSignal.timeout(10000),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`InternPrep ${res.status}`);
+  const rows = (await res.json()) as { id: string; raw_text: string; created_at: string }[];
+  return rows[0] ?? null;
+}
+
+async function internprep(path: string, init: RequestInit, timeoutMs = 60000) {
+  const base = env("INTERNPREP_API_URL");
+  if (!base || DEMO()) return null;
+  const res = await fetch(`${base}${path}`, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  if (!res.ok) throw new Error(`InternPrep API ${res.status}: ${(await res.text()).slice(0, 160)}`);
+  return res.json();
+}
+
+export async function atsCheck(rawText: string, targetRole: string, jobDescription?: string) {
+  const form = new FormData();
+  form.set("raw_text", rawText);
+  form.set("target_role", targetRole);
+  form.set("mode", "iitb_placement");
+  if (jobDescription) form.set("job_description", jobDescription);
+  const r = await internprep("/resume/ats-check", { method: "POST", body: form });
+  if (!r) return null;
+  const kw = r.pillars?.keyword_match ?? {};
+  return {
+    overall_score: r.overall_score,
+    tier: r.tier,
+    target_role: r.target_role_label ?? targetRole,
+    quick_wins: r.quick_wins,
+    keyword_match: { score: kw.score, found: kw.found_keywords, missing_critical: kw.missing_critical, critical_found: `${kw.found_critical_count ?? "?"}/${kw.total_critical_count ?? "?"}`, suggestions: kw.suggestions },
+    section_health: r.section_health,
+  };
+}
+
+export async function startInterview(kind: "case" | "domain", opts: { domain?: string; company?: string; caseType?: string; resumeId?: string }) {
+  const body = kind === "case"
+    ? { case_type: opts.caseType ?? "Random" }
+    : { domain: opts.domain ?? "consulting", company: opts.company, resume_id: opts.resumeId };
+  const r = await internprep(`/interview/${kind === "case" ? "start_case" : "start_domain"}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }, 90000);
+  if (!r) return null;
+  const web = env("INTERNPREP_WEB_URL") ?? "http://localhost:3000";
+  return { session_id: r.session_id, opening_question: r.initial_message, case_context: r.case_context?.slice(0, 1200), link: `${web}/interview?id=${r.session_id}` };
+}

@@ -12,14 +12,16 @@ type Artifact =
   | { kind: "event"; title: string; start: string; end: string; link: string }
   | { kind: "message"; channel: string; text: string; delivered: boolean }
   | { kind: "email"; to: string; subject: string; body: string }
-  | { kind: "repo"; name: string; url: string; stars: number };
+  | { kind: "repo"; name: string; url: string; stars: number }
+  | { kind: "fit"; role: string; score: number; tier?: string; wins: string[] }
+  | { kind: "practice"; title: string; question: string; link: string };
 type Plan = { goal: string; steps: { title: string; tool: string }[] };
 
 const WORKFLOWS = [
   { icon: "🏆", title: "Case competition", text: "I have a case competition coming up. Help me prepare and block prep time." },
-  { icon: "🎯", title: "Opportunities", text: "Find opportunities I should apply to this week, and put the deadlines on my calendar." },
+  { icon: "🎯", title: "Opportunities", text: "Find opportunities I should apply to this week, check my resume fit for the best one, and put the deadlines on my calendar." },
+  { icon: "🎤", title: "Interview prep", text: "I have a strategy internship interview next week. Check my resume against the role and set up a mock interview." },
   { icon: "⚡", title: "Build Day copilot", text: "I want to build something impressive for Claude Build Day tonight. Plan it using what I've already built." },
-  { icon: "🗓️", title: "Plan my week", text: "I have a probability mid-sem, club work and a case competition. Plan my week around my calendar." },
 ];
 const CONNECTED = ["InternPrep AI", "CaseForge", "Opportunity OS", "Calendar", "Telegram", "GitHub", "Tavily research"];
 
@@ -352,6 +354,31 @@ function ArtifactRow({ a }: { a: Artifact }) {
       <div className="artifact">
         <div className="a-ic">✉️</div>
         <div><div className="a-t">Draft: {a.subject}</div><div className="a-s">To {a.to}{"\n\n"}{a.body}</div></div>
+      </div>
+    );
+  }
+  if (a.kind === "fit") {
+    const color = a.score >= 75 ? "var(--ok)" : a.score >= 60 ? "var(--warn)" : "var(--err)";
+    return (
+      <div className="artifact">
+        <div className="score-ring" style={{ borderColor: color, color }}>{a.score}</div>
+        <div>
+          <div className="a-t">Resume fit · {a.role}</div>
+          <div className="a-s">{a.tier ? `InternPrep ATS: ${a.tier}` : "InternPrep ATS"}</div>
+          {a.wins.length > 0 && <ul className="wins">{a.wins.map((w, i) => <li key={i}>{w}</li>)}</ul>}
+        </div>
+      </div>
+    );
+  }
+  if (a.kind === "practice") {
+    return (
+      <div className="artifact">
+        <div className="a-ic">🎤</div>
+        <div>
+          <div className="a-t">{a.title}</div>
+          <div className="a-s">“{a.question}{a.question.length >= 400 ? "…" : ""}”</div>
+          <a href={a.link} target="_blank" rel="noreferrer">Start practising in InternPrep AI →</a>
+        </div>
       </div>
     );
   }

@@ -1,7 +1,7 @@
 # BUILD STATE
 
 ## Current Goal
-Phase 2 P0 is done: profile, opportunities + scores, CaseForge and Telegram are all live. P1 items 6 (.ics) and 7 (CaseForge team work) are also done. Remaining: P1 item 5 (InternPrep resume fit), item 8, then P2 speed + demo hardening.
+One loop across the student's three products: FIND (Opportunity OS) → PREPARE (InternPrep AI, CaseForge) → PERFORM (calendar, Telegram, practice). InternPrep is now integrated. Next: Life Archive (calendar sync + activity log) if time permits.
 
 ## Working (tested end to end on 2026-09-23)
 - [x] Goal input (text + voice, Web Speech API)
@@ -17,6 +17,9 @@ Phase 2 P0 is done: profile, opportunities + scores, CaseForge and Telegram are 
 - [x] Telegram (**live**, test recap delivered to phone 2026-09-23)
 - [x] Profile (**live**, Opportunity OS `profiles`, Krishna Gahlod)
 - [x] CaseForge (**live**, Neon over HTTPS since port 5432 is blocked on venue wifi; Meesho DICE 3.0 + Oliver Wyman Decode)
+- [x] InternPrep AI resume (**live**, `resumes` table in InternPrep Supabase)
+- [x] InternPrep AI ATS fit check (**live**, FastAPI `POST /resume/ats-check`, ~11s)
+- [x] InternPrep AI mock interviews (**live**, `POST /interview/start_case|start_domain`, 15–27s; link opens InternPrep web)
 - [ ] Browser automation
 
 ## Measured runs
@@ -31,9 +34,13 @@ Phase 2 P0 is done: profile, opportunities + scores, CaseForge and Telegram are 
 |---|---|---|
 | Opportunities | 46s | 30 live, all pre-scored; Telegram delivered |
 | Case (Meesho DICE 3.0) | 68s | real 3-slide round, live RTO research, 3 blocks |
+| Interview prep | 79s | Opportunity OS role → InternPrep ATS 56/100 (6/13 critical keywords) → live growth mock case → 2 events |
 | Case + team work | 53s | reads 19 items of team work (playbook, reasoning nodes, sources); built on existing blocks |
 
 ## Demo gotchas
+- Three servers must be running: CampusOS (3100), InternPrep API (8000, `apps/api/.venv`), InternPrep web (3200, since 3000 is used by Tarashio).
+- Log into local InternPrep web once before the demo so practice links open straight into the session.
+- Interview-prep run takes ~80s (mock-interview creation is the slow step). Narrate over it.
 - Restart the dev server before the demo: created events persist in memory across runs.
 
 ## Current Blocker

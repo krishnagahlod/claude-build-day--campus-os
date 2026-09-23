@@ -6,6 +6,19 @@ CampusOS is an AI execution layer for college students. You say what you want do
 
 Built at Claude Code Build Day.
 
+## One loop across three products
+
+CampusOS connects three student products that were built separately:
+
+| Stage | Product | What CampusOS uses |
+|---|---|---|
+| **Find** | Opportunity OS | Live opportunities, with its own per-student match scores |
+| **Prepare** | InternPrep AI | Resume, ATS fit check against a role, live mock case and domain interviews |
+| **Prepare** | CaseForge | Active case competitions, rounds, and the team's existing case work |
+| **Perform** | Calendar + Telegram | Prep blocks, deadline checks, and nudges on your phone |
+
+A single outcome, such as "I have a strategy interview next week", flows through all of them: find the role, score the resume against it, spin up a mock interview, book the practice time, and send a recap.
+
 ## What it does
 
 1. **Plan.** Claude publishes a structured plan for your outcome.
@@ -20,7 +33,8 @@ The **live execution timeline** shows every tool call as it happens, which app i
 | Workflow | Tools used |
 |---|---|
 | Case competition prep | CaseForge → web research → calendar → prep sessions → Telegram |
-| Opportunities this week | InternPrep profile → Opportunity OS → matching → deadline events → Telegram |
+| Opportunities this week | Profile → Opportunity OS (scored) → InternPrep ATS fit → deadline events → Telegram |
+| Interview prep | Resume → Opportunity OS role → InternPrep ATS → InternPrep mock interview → practice blocks |
 | Build Day copilot | Profile + existing projects → GitHub → research → build plan |
 | Plan my week | Calendar → tasks → schedule → Telegram |
 
@@ -33,9 +47,9 @@ Goal (text or voice)
   → /api/run (streams NDJSON events)
     → Claude (claude-opus-5) plans + calls tools
       → Tool registry (src/lib/tools.ts)
-          observe:  get_student_profile, web_search, read_page, github_search,
-                    find_opportunities, analyze_case, get_calendar
-          prepare:  draft_email
+          observe:  get_student_profile, get_resume, check_resume_fit, web_search,
+                    read_page, github_search, find_opportunities, analyze_case, get_calendar
+          prepare:  start_mock_interview, draft_email
           execute:  create_calendar_event, send_telegram  ← approval gate (/api/approve)
   → Timeline + result brief + browser TTS
 ```

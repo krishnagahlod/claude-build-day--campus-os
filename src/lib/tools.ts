@@ -7,7 +7,7 @@ import {
   searchFixture,
   studentProfile,
 } from "./fixtures";
-import { fetchCase, fetchOpportunities, fetchProfile } from "./sources";
+import { atsCheck, fetchCase, fetchOpportunities, fetchProfile, fetchResume, startInterview } from "./sources";
 
 // Autonomy levels from the product spec: observe → prepare → execute (gated).
 export type Risk = "observe" | "prepare" | "execute";
@@ -23,7 +23,9 @@ export type Artifact =
   | { kind: "event"; title: string; start: string; end: string; link: string }
   | { kind: "message"; channel: string; text: string; delivered: boolean }
   | { kind: "email"; to: string; subject: string; body: string }
-  | { kind: "repo"; name: string; url: string; stars: number };
+  | { kind: "repo"; name: string; url: string; stars: number }
+  | { kind: "fit"; role: string; score: number; tier?: string; wins: string[] }
+  | { kind: "practice"; title: string; question: string; link: string };
 
 type ToolDef = {
   name: string;
@@ -196,6 +198,80 @@ export const TOOLS: ToolDef[] = [
       }
       const c = caseLibrary()[0];
       return { data: c, summary: `${c.company} · ${c.industry} · ${c.competition}`, source: "demo" };
+    },
+  },
+  {
+    name: "get_resume",
+    app: "InternPrep AI",
+    risk: "observe",
+    requiresApproval: false,
+    description: "Read the student's latest resume text from InternPrep AI. Use it to judge fit, pick talking points, or tailor applications. It is the ground truth for the student's background.",
+    input_schema: { type: "object", properties: {}, required: [] },
+    label: () => "Reading your resume from InternPrep AI",
+    run: async () => {
+      const r = await fetchResume().catch(() => null);
+      if (r) return { data: { resume_id: r.id, updated: r.created_at, text: r.raw_text.slice(0, 7000) }, summary: `Resume · ${r.raw_text.length.toLocaleString()} characters · updated ${new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`, source: "live" };
+      return { data: { text: studentProfile.projects.map((p) => `${p.name}: ${p.summary}`).join("\n") }, summary: "Resume unavailable · using profile projects", source: "demo" };
+    },
+  },
+  {
+    name: "check_resume_fit",
+    app: "InternPrep AI",
+    risk: "observe",
+    requiresApproval: false,
+    description: "Score the student's resume against a target role and (optionally) a job description using InternPrep AI's ATS engine. Returns overall score, tier, matched/missing keywords and prioritised quick wins. Use for the top 1-2 opportunities only.",
+    input_schema: {
+      type: "object",
+      properties: {
+        target_role: { type: "string", description: "e.g. consulting, product, finance, data, software" },
+        job_description: { type: "string", description: "Role title, company and key requirements, as detailed as you have" },
+        label: { type: "string", description: "Short name shown to the student, e.g. 'Turtlemint · Strategy Intern'" },
+      },
+      required: ["target_role"],
+    },
+    label: (i) => `Scoring your resume for ${i.label ?? i.target_role} (InternPrep ATS)`,
+    run: async ({ target_role, job_description, label }) => {
+      const resume = await fetchResume().catch(() => null);
+      if (!resume) throw new Error("No resume found in InternPrep AI");
+      const r = await atsCheck(resume.raw_text, target_role, job_description);
+      if (!r) throw new Error("InternPrep API not configured");
+      const wins = (r.quick_wins ?? []).map((w: any) => `${w.title}${w.impact_pts ? ` (${w.impact_pts})` : ""}: ${w.hint ?? ""}`);
+      return {
+        data: r,
+        summary: `${r.overall_score}/100${r.tier ? ` · ${r.tier}` : ""} · ${wins.length} quick wins`,
+        source: "live",
+        artifact: { kind: "fit", role: label ?? target_role, score: r.overall_score, tier: r.tier, wins: wins.slice(0, 3) },
+      };
+    },
+  },
+  {
+    name: "start_mock_interview",
+    app: "InternPrep AI",
+    risk: "prepare",
+    requiresApproval: false,
+    description: "Create a ready-to-start mock interview in InternPrep AI and return its opening question and a link the student opens to practise. kind='case' for consulting/strategy case interviews; kind='domain' for role interviews (domain like consulting, product, finance, data; company optional).",
+    input_schema: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: ["case", "domain"] },
+        domain: { type: "string" },
+        company: { type: "string" },
+        case_type: { type: "string", description: "For case: e.g. Profitability, Market Entry, Growth, Random" },
+      },
+      required: ["kind"],
+    },
+    label: (i) => i.kind === "case" ? `Setting up a mock case interview${i.case_type && i.case_type !== "Random" ? ` (${i.case_type})` : ""}` : `Setting up a mock ${i.domain ?? ""} interview${i.company ? ` for ${i.company}` : ""}`,
+    run: async ({ kind, domain, company, case_type }) => {
+      const resume = kind === "domain" ? await fetchResume().catch(() => null) : null;
+      const r = await startInterview(kind, { domain, company, caseType: case_type, resumeId: resume?.id });
+      if (!r) throw new Error("InternPrep API not configured");
+      const title = kind === "case" ? "Mock case interview" : `Mock ${domain ?? ""} interview${company ? ` · ${company}` : ""}`;
+      return {
+        data: { opening_question: r.opening_question, case_context: r.case_context, link: r.link },
+        summary: "Interviewer ready · session created",
+        source: "live",
+        artifact: { kind: "practice", title, question: String(r.opening_question ?? "").slice(0, 400), link: r.link },
+      };
     },
   },
   {
