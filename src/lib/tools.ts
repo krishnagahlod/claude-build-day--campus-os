@@ -7,6 +7,7 @@ import {
   searchFixture,
   studentProfile,
 } from "./fixtures";
+import { fetchCase, fetchOpportunities, fetchProfile } from "./sources";
 
 // Autonomy levels from the product spec: observe → prepare → execute (gated).
 export type Risk = "observe" | "prepare" | "execute";
@@ -70,11 +71,20 @@ export const TOOLS: ToolDef[] = [
     description: "Read the student's profile from InternPrep AI: education, skills, projects, resume highlights, interests and preferences. Call this early for any personalised goal.",
     input_schema: { type: "object", properties: {}, required: [] },
     label: () => "Loading your profile from InternPrep AI",
-    run: async () => ({
-      data: studentProfile,
-      summary: `${studentProfile.name} · ${studentProfile.degree} · ${studentProfile.skills.length} skills, ${studentProfile.projects.length} projects`,
-      source: "demo",
-    }),
+    run: async () => {
+      const live = await fetchProfile().catch(() => null);
+      if (live) {
+        // Live profile from Opportunity OS; projects list is the student's own portfolio.
+        const data = { ...live, projects: studentProfile.projects, preferences: studentProfile.preferences };
+        const skills = new Set([...((live.skills as string[]) ?? []), ...((live.resume_skills as string[]) ?? [])]);
+        return { data, summary: `${live.full_name} · ${live.college} '${String(live.graduation_year ?? "").slice(-2)} · ${skills.size} skills, ${studentProfile.projects.length} projects`, source: "live" };
+      }
+      return {
+        data: studentProfile,
+        summary: `${studentProfile.name} · ${studentProfile.degree} · ${studentProfile.skills.length} skills, ${studentProfile.projects.length} projects`,
+        source: "demo",
+      };
+    },
   },
   {
     name: "web_search",
@@ -147,7 +157,7 @@ export const TOOLS: ToolDef[] = [
     app: "Opportunity OS",
     risk: "observe",
     requiresApproval: false,
-    description: "Fetch open opportunities (internships, fellowships, hackathons) from Opportunity OS with deadlines, eligibility and apply links. You do the matching against the profile.",
+    description: "Fetch open opportunities (internships, fellowships, competitions, hackathons) from Opportunity OS with deadlines, eligibility and apply links. Items include match_score (0-100) and match_why from Opportunity OS's own scoring engine when available: use them, and add your own judgement against the profile.",
     input_schema: {
       type: "object",
       properties: { within_days: { type: "number", description: "Only deadlines within this many days" } },
@@ -155,24 +165,17 @@ export const TOOLS: ToolDef[] = [
     },
     label: (i) => `Querying Opportunity OS${i.within_days ? ` (deadlines ≤ ${i.within_days} days)` : ""}`,
     run: async ({ within_days }) => {
-      let list = opportunities();
-      let source: "live" | "demo" = "demo";
-      const url = env("OPPORTUNITY_SUPABASE_URL");
-      const key = env("OPPORTUNITY_SUPABASE_KEY");
-      if (url && key && !DEMO) {
-        try {
-          const res = await fetch(
-            `${url}/rest/v1/opportunities?status=eq.active&deadline=gte.${new Date().toISOString()}&order=deadline.asc&limit=40&select=id,title,organization,category,tags,eligibility,deadline,location,compensation,apply_url`,
-            { headers: { apikey: key, Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000) },
-          );
-          if (res.ok) { const rows = await res.json(); if (rows.length) { list = rows; source = "live"; } }
-        } catch { /* fixture */ }
+      const live = await fetchOpportunities(within_days).catch(() => null);
+      if (live?.length) {
+        const scored = live.filter((o: any) => o.match_score != null).length;
+        return { data: live, summary: `${live.length} open opportunities · ${scored} pre-scored for you`, source: "live" };
       }
+      let list = opportunities();
       if (within_days) {
         const cutoff = Date.now() + within_days * 864e5;
-        list = list.filter((o: any) => !o.deadline || new Date(o.deadline).getTime() <= cutoff);
+        list = list.filter((o) => new Date(o.deadline).getTime() <= cutoff);
       }
-      return { data: list, summary: `${list.length} open opportunities found`, source };
+      return { data: list, summary: `${list.length} open opportunities found`, source: "demo" };
     },
   },
   {
@@ -180,10 +183,16 @@ export const TOOLS: ToolDef[] = [
     app: "CaseForge",
     risk: "observe",
     requiresApproval: false,
-    description: "Load the student's upcoming case competition from CaseForge: company, problem statement, constraints, key questions, suggested frameworks and data needed.",
+    description: "Load the student's active case competition from CaseForge: competition rules, rounds (deliverable format, slide/time limits, deadlines), the case problem statement, objectives and constraints. Pass a hint (competition or company name) if the student named one.",
     input_schema: { type: "object", properties: { hint: { type: "string", description: "Competition or company name, if known" } }, required: [] },
     label: () => "Pulling your case brief from CaseForge",
-    run: async () => {
+    run: async ({ hint }) => {
+      const live = await fetchCase(hint).catch(() => null);
+      if (live) {
+        const r = (live.rounds as any[])[0];
+        const fmt = r ? ` · ${r.name}: ${r.deliverableFormat}${r.slideLimit ? ` (${r.slideLimit} slides)` : ""}${r.timeLimitMinutes ? ` (${r.timeLimitMinutes} min)` : ""}` : "";
+        return { data: live, summary: `${live.competition.name}${fmt}`, source: "live" };
+      }
       const c = caseLibrary()[0];
       return { data: c, summary: `${c.company} · ${c.industry} · ${c.competition}`, source: "demo" };
     },

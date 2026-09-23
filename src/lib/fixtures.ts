@@ -11,10 +11,9 @@ export function daysFromNow(days: number, hour = 9, minute = 0): Date {
 
 // InternPrep AI profile shape (edit freely for the demo).
 export const studentProfile = {
-  name: "Aarav Mehta",
+  name: "Krishna Gahlod",
   university: "IIT Bombay",
-  degree: "B.Tech, Computer Science (3rd year)",
-  cgpa: 8.6,
+  degree: "IIT Bombay, Class of 2027",
   location: "Mumbai, India",
   skills: ["TypeScript", "Next.js", "Python", "FastAPI", "Postgres", "LLM apps", "Financial modelling"],
   interests: ["AI agents", "fintech", "product management", "consulting case competitions"],

@@ -16,7 +16,7 @@ type Artifact =
 type Plan = { goal: string; steps: { title: string; tool: string }[] };
 
 const WORKFLOWS = [
-  { icon: "🏆", title: "Case competition", text: "I have a case competition this weekend. Help me prepare and block prep time." },
+  { icon: "🏆", title: "Case competition", text: "I have a case competition coming up. Help me prepare and block prep time." },
   { icon: "🎯", title: "Opportunities", text: "Find opportunities I should apply to this week, and put the deadlines on my calendar." },
   { icon: "⚡", title: "Build Day copilot", text: "I want to build something impressive for Claude Build Day tonight. Plan it using what I've already built." },
   { icon: "🗓️", title: "Plan my week", text: "I have a probability mid-sem, club work and a case competition. Plan my week around my calendar." },
@@ -36,6 +36,8 @@ export default function Home() {
   const [listening, setListening] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
   const recRef = useRef<any>(null);
+  const [me, setMe] = useState<{ name: string; college: string }>({ name: "Krishna Gahlod", college: "IIT Bombay" });
+  useEffect(() => { fetch("/api/profile").then((r) => r.json()).then((p) => p?.name && setMe(p)).catch(() => {}); }, []);
   const running = activeGoal !== null && !final && !error;
 
   useEffect(() => { try { setVoiceOn(localStorage.getItem("campusos.voice") !== "off"); } catch {} }, []);
@@ -154,7 +156,7 @@ export default function Home() {
         <button className="brand" onClick={reset} aria-label="CampusOS home"><span className="logo" /> CampusOS</button>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <button className="speak-btn" onClick={toggleVoice} title="Spoken summary">{voiceOn ? "🔊 Voice on" : "🔇 Voice off"}</button>
-          <div className="profile-pill"><span className="avatar">AM</span>Aarav · IIT Bombay</div>
+          <div className="profile-pill"><span className="avatar">{me.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}</span>{me.name.split(" ")[0]} · {me.college}</div>
         </div>
       </header>
 
