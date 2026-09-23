@@ -57,14 +57,28 @@ export async function runAgent(goal: string, runId: string, emit: (e: AgentEvent
   emit({ type: "status", text: "Understanding your goal" });
 
   for (let turn = 0; turn < 12; turn++) {
-    const response = await client.messages.create({
+    // Stream so the timeline can say what Claude is drafting while it writes, instead of going quiet.
+    const stream = client.messages.stream({
       model: MODEL,
       max_tokens: 16000,
       system: systemPrompt(),
       tools: anthropicTools,
       output_config: { effort: (process.env.CAMPUSOS_EFFORT as "low" | "medium" | "high") || "low" },
       messages,
-    } as Anthropic.MessageCreateParamsNonStreaming);
+    } as Anthropic.MessageStreamParams);
+    const drafting: string[] = [];
+    stream.on("streamEvent", (ev) => {
+      if (ev.type === "content_block_start" && ev.content_block.type === "tool_use") {
+        const name = ev.content_block.name;
+        if (name === "create_plan") emit({ type: "status", text: "Building your plan" });
+        else if (name === "create_calendar_event") emit({ type: "status", text: `Drafting prep session ${drafting.push(name)}` });
+        else if (name === "send_telegram") emit({ type: "status", text: "Writing your Telegram recap" });
+        else emit({ type: "status", text: `Preparing ${toolByName.get(name)?.app ?? name}` });
+      } else if (ev.type === "content_block_start" && ev.content_block.type === "text") {
+        emit({ type: "status", text: "Writing your brief" });
+      }
+    });
+    const response = await stream.finalMessage();
 
     if (response.stop_reason === "refusal") {
       emit({ type: "error", message: "The model declined this request." });
@@ -138,7 +152,7 @@ export async function runAgent(goal: string, runId: string, emit: (e: AgentEvent
     await Promise.all(ungated.filter((t) => t.name !== "create_plan").map(runOne));
     for (const t of gated) await runOne(t);
 
-    emit({ type: "status", text: "Deciding next step" });
+    emit({ type: "status", text: "Analysing results" });
     // All results go back in one user message, in the original order.
     messages.push({ role: "user", content: toolUses.map((t) => results.get(t.id)!) });
   }
