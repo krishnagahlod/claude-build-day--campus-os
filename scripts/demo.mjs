@@ -11,7 +11,7 @@ const procs = [
 ];
 
 const children = procs.map((p) => {
-  const child = spawn(p.cmd, p.args, { cwd: p.cwd, shell: process.platform === "win32", env: process.env });
+  const child = spawn(p.cmd, p.args, { cwd: p.cwd, shell: process.platform === "win32" && p.cmd === "npx", env: process.env });
   const tag = `\x1b[${p.color}m[${p.name}]\x1b[0m `;
   const pipe = (stream) => stream.on("data", (d) => d.toString().split(/\r?\n/).filter(Boolean).forEach((l) => console.log(tag + l)));
   pipe(child.stdout); pipe(child.stderr);
