@@ -42,6 +42,7 @@ How to work:
 Final answer format (markdown, tight, no preamble, no tables wider than 4 columns):
 ## <outcome in a few words>
 2-3 sentence summary of what you did and found.
+Never paste raw URLs: always write markdown links with a short label, e.g. [Apply](url) or [Start the mock interview](url).
 Then the most useful sections for this goal (e.g. "Top matches", "Prep plan", "Build plan", "Scheduled"), using bullets with specifics: names, dates, numbers, links.
 ## Next action
 One concrete thing the student should do now.
@@ -49,7 +50,7 @@ One concrete thing the student should do now.
 On the very last line write: SPOKEN: <one or two natural sentences summarising what you did, for text-to-speech, no markdown>.`;
 }
 
-export async function runAgent(goal: string, runId: string, emit: (e: AgentEvent) => void) {
+export async function runAgent(goal: string, runId: string, emit: (e: AgentEvent) => void, signal?: AbortSignal) {
   const client = new Anthropic();
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: goal }];
   let stepCounter = 0;
@@ -57,6 +58,7 @@ export async function runAgent(goal: string, runId: string, emit: (e: AgentEvent
   emit({ type: "status", text: "Understanding your goal" });
 
   for (let turn = 0; turn < 12; turn++) {
+    if (signal?.aborted) return; // student pressed Stop or closed the tab
     // Stream so the timeline can say what Claude is drafting while it writes, instead of going quiet.
     const stream = client.messages.stream({
       model: MODEL,
@@ -65,7 +67,7 @@ export async function runAgent(goal: string, runId: string, emit: (e: AgentEvent
       tools: anthropicTools,
       output_config: { effort: (process.env.CAMPUSOS_EFFORT as "low" | "medium" | "high") || "low" },
       messages,
-    } as Anthropic.MessageStreamParams);
+    } as Anthropic.MessageStreamParams, { signal });
     const drafting: string[] = [];
     stream.on("streamEvent", (ev) => {
       if (ev.type === "content_block_start" && ev.content_block.type === "tool_use") {
@@ -121,7 +123,9 @@ export async function runAgent(goal: string, runId: string, emit: (e: AgentEvent
         emit({ type: "step", ...base, status: "awaiting" });
         const ok = await new Promise<boolean>((resolve) => {
           approvals.set(`${runId}:${id}`, resolve);
-          setTimeout(() => { if (approvals.delete(`${runId}:${id}`)) resolve(false); }, 5 * 60_000);
+          const release = () => { if (approvals.delete(`${runId}:${id}`)) resolve(false); };
+          setTimeout(release, 5 * 60_000);
+          signal?.addEventListener("abort", release, { once: true });
         });
         if (!ok) {
           emit({ type: "step", ...base, status: "skipped", summary: "You declined this action" });

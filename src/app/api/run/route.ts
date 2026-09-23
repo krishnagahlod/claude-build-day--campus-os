@@ -18,8 +18,9 @@ export async function POST(req: Request) {
       };
       emit({ type: "run", runId });
       try {
-        await runAgent(goal.trim(), runId, emit);
+        await runAgent(goal.trim(), runId, emit, req.signal);
       } catch (e) {
+        if (req.signal.aborted) return;
         emit({ type: "error", message: e instanceof Error ? e.message : String(e) });
       } finally {
         try { controller.close(); } catch { /* already closed */ }

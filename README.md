@@ -6,6 +6,8 @@ CampusOS is an AI execution layer for college students. You say what you want do
 
 Built at Claude Code Build Day.
 
+![CampusOS home](docs/screenshots/home.png)
+
 ## One loop across three products
 
 CampusOS connects three student products that were built separately:
@@ -38,7 +40,15 @@ The **live execution timeline** shows every tool call as it happens, which app i
 | Build Day copilot | Profile + existing projects → GitHub → research → build plan |
 | Plan my week | Calendar → tasks → schedule → Telegram |
 
-All four share one agent engine: a Claude tool-use loop over a small registry of single-purpose tools, each with a risk level (`observe`, `prepare` or `execute`).
+All of them share one agent engine: a Claude tool-use loop over a small registry of single-purpose tools, each with a risk level (`observe`, `prepare` or `execute`).
+
+## In action
+
+| Approval gate | Finished run |
+|---|---|
+| ![Approval](docs/screenshots/approval.png) | ![Run](docs/screenshots/run.png) |
+
+See [INTEGRATIONS.md](INTEGRATIONS.md) for exactly what CampusOS takes from each product, and [DEMO.md](DEMO.md) for the demo runbook.
 
 ## Architecture
 

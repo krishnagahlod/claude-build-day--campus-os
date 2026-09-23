@@ -37,6 +37,11 @@ One loop across the student's three products: FIND (Opportunity OS) → PREPARE 
 | Interview prep | 79s | Opportunity OS role → InternPrep ATS 56/100 (6/13 critical keywords) → live growth mock case → 2 events |
 | Case + team work | 53s | reads 19 items of team work (playbook, reasoning nodes, sources); built on existing blocks |
 
+## Product polish (done)
+- Live system status (6/6), Find → Prepare → Perform section, product-coloured badges, SVG icons
+- Run status pill with timer, real Stop (aborts the server loop), recent runs, copy/listen, `.ics` export
+- Production build passes; desktop + mobile verified with headless Edge screenshots
+
 ## Demo gotchas
 - Three servers must be running: CampusOS (3100), InternPrep API (8000, `apps/api/.venv`), InternPrep web (3200, since 3000 is used by Tarashio).
 - Log into local InternPrep web once before the demo so practice links open straight into the session.
